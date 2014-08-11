@@ -1,5 +1,7 @@
 #include "cinder/app/AppNative.h"
 #include "cinder/gl/gl.h"
+#include "cinder/gl/Vbo.h"
+
 #include "cinder/Camera.h"
 #include "cinder/params/Params.h"
 
@@ -21,8 +23,13 @@ class TrianglePaintApp : public AppNative {
 	void update();
 	void draw();
 	void drawGrid( float size );
-	Vec2f convert( int r, int b );
+	void drawAxis( float r, float b );
+	void drawMover();
+
+	Vec2f convert( Vec2f rb );
 	Vec2f worldFromScreen( Vec2i xy );
+
+	gl::VboMeshRef	mVboMesh;
 
 	cinder::CameraOrtho mCam;
 	int mR = 1;
@@ -40,11 +47,34 @@ class TrianglePaintApp : public AppNative {
 void TrianglePaintApp::setup()
 {
 	mParams = params::InterfaceGl( "Parameters", Vec2i( 220, 170 ) );
-	mParams.addParam( "R", &mR, "keyIncr=R keyDecr=r" );
-	mParams.addParam( "B", &mB, "keyIncr=B keyDecr=b" );
-
 	mParams.addParam( "X", &touched.x, true );
 	mParams.addParam( "Y", &touched.y, true );
+	mParams.hide();
+
+
+	static const int VERTICES_X = 10, VERTICES_Z = 5;
+
+	// setup the parameters of the Vbo
+	int totalVertices = VERTICES_X * VERTICES_Z;
+	int totalQuads = ( VERTICES_X - 1 ) * ( VERTICES_Z - 1 );
+	gl::VboMesh::Layout layout;
+	layout.setStaticIndices();
+	layout.setDynamicPositions();
+	mVboMesh = gl::VboMesh::create( totalVertices, totalQuads * 4, layout, GL_QUADS );
+
+	// buffer our static data - the texcoords and the indices
+	vector<uint32_t> indices;
+	for( int x = 0; x < VERTICES_X; ++x ) {
+		for( int z = 0; z < VERTICES_Z; ++z ) {
+			// create a quad for each vertex, except for along the bottom and right edges
+			if( ( x + 1 < VERTICES_X ) && ( z + 1 < VERTICES_Z ) ) {
+				indices.push_back( (x+0) * VERTICES_Z + (z+0) );
+				indices.push_back( (x+1) * VERTICES_Z + (z+0) );
+				indices.push_back( (x+1) * VERTICES_Z + (z+1) );
+				indices.push_back( (x+0) * VERTICES_Z + (z+1) );
+			}
+		}
+	}
 }
 
 // Replicate most of the defaultResize so we get a reference to the camera
@@ -59,9 +89,6 @@ void TrianglePaintApp::resize()
 void TrianglePaintApp::mouseDown( MouseEvent event )
 {
 	touched = worldFromScreen(mouse);
-	mR = round(touched.x);
-	mB = round(touched.y);
-	console() << mouse << "\n\t" << touched << endl;
 }
 
 void TrianglePaintApp::mouseMove( MouseEvent event )
@@ -71,7 +98,6 @@ void TrianglePaintApp::mouseMove( MouseEvent event )
 
 void TrianglePaintApp::update()
 {
-	//  mB = - (mR + mG);
 }
 
 void TrianglePaintApp::draw()
@@ -80,35 +106,25 @@ void TrianglePaintApp::draw()
 
 	gl::clear( Color::white() );
 
-	drawGrid( 500 );
+//	drawGrid( 500 );
 
 	// Origin
-	gl::color( Colorf( 1.0f, 0.0f, 0.0f) );
-	gl::drawSolidCircle( Vec2f::zero(), 10 );
+	gl::color( ColorA::black() );
+	gl::drawSolidCircle( Vec2f::zero(), 5 );
 
-	// Mover
-	gl::color( Colorf( 0.0f, 0.0f, 0.0f) );
-	gl::drawSolidCircle(convert( mR, mB ), 10 );
+	drawMover();
+
+//	drawAxis(rb.x, rb.y);
 
 
 
-	Vec2f parts = worldFromScreen(mouse);
-	//  console() << mouse << "\n\t" << parts << endl;
+	gl::enableWireframe();
+	gl::color( Color::black() );
+	gl::draw( mVboMesh );
+	gl::disableWireframe();
 
-	float theta = 11 * M_PI / 6;
-	float slope = -tan(theta);
-	Vec2f bBasis = Vec2f(0, -1);
-	Vec2f rBasis = Vec2f(cos(theta), -sin(theta));
 
-	Vec2f r = rBasis * parts.x * mUnit;
-	Vec2f b = bBasis * parts.y * mUnit;
 
-	gl::lineWidth(2);
-	gl::color( Colorf( 1.0f, 0.0f, 1.0f) );
-	gl::drawLine(Vec2f(0, 0), r);
-	gl::color( Colorf( 0.0f, 1.0f, 1.0f) );
-	gl::drawLine(r, b + r);
-	gl::lineWidth(1);
 
 	gl::popModelView();
 
@@ -147,13 +163,61 @@ void TrianglePaintApp::drawGrid( float size )
 	gl::popModelView();
 }
 
+void TrianglePaintApp::drawAxis( float _r, float _b )
+{
+	// Isolate the two vectors so we can draw the components
+	Vec2f r = convert(Vec2f(_r, 0));
+	Vec2f b = convert(Vec2f(0, _b));
+	gl::lineWidth(2);
+	gl::color( Colorf( 1.0f, 0.0f, 1.0f) );
+	gl::drawLine(Vec2f(0, 0), r);
+	gl::color( Colorf( 0.0f, 1.0f, 1.0f) );
+	gl::drawLine(r, b + r);
+	gl::lineWidth(1);
+}
+
+void TrianglePaintApp::drawMover()
+{
+	Vec2f rb = worldFromScreen(mouse);
+	int fr = floor(rb.x);
+	int fb = floor(rb.y);
+	int cr = ceil(rb.x);
+	int cb = ceil(rb.y);
+	Vec2f vert1 = Vec2f( fr, fb );
+	Vec2f vert2 = Vec2f(  0, cb );
+	Vec2f vert3 = Vec2f( cr,  0 );
+	// Triangles can be in two orientations, we want the vertexes to always be
+	// in clockwise order so we have to do a little more work.
+	if (rb.x - fr < rb.y - fb ) {
+		vert2.x = fr;
+		vert3.y = cb;
+	} else {
+		vert2.x = cr;
+		vert3.y = fb;
+	}
+//	console() << vert1 << " " << vert2 << " " << vert3 << endl;
+
+	// Surrounding points
+	gl::color( Colorf( 1.0f, 0.0f, 0.0f) );
+	gl::drawSolidCircle( convert(vert1), 5 );
+	gl::color( Colorf( 0.0f, 1.0f, 0.0f) );
+	gl::drawSolidCircle( convert(vert2), 5 );
+	gl::color( Colorf( 0.0f, 0.0f, 1.0f) );
+	gl::drawSolidCircle( convert(vert3), 5 );
+
+	// Triangle
+	gl::color( Colorf( 0.0f, 0.0f, 0.0f) );
+	gl::drawSolidTriangle(convert(vert1), convert(vert2), convert(vert3));
+}
+
+
 // RGB to XY
-Vec2f TrianglePaintApp::convert( int r, int b )
+Vec2f TrianglePaintApp::convert( Vec2f rb )
 {
 	// Red is 330 degrees
-	Vec2f vr = Vec2f(M_SQRT_3_2, 0.5f) * r;
+	Vec2f vr = Vec2f(M_SQRT_3_2, 0.5f) * rb.x;
 	// Blue is 90 degrees (up)
-	Vec2f vb = Vec2f(0, -1) * b;
+	Vec2f vb = Vec2f(0, -1) * rb.y;
 
 	return (vb + vr) * mUnit;
 }
