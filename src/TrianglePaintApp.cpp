@@ -1,7 +1,6 @@
 #include "cinder/app/AppNative.h"
 #include "cinder/gl/gl.h"
 #include "cinder/gl/Vbo.h"
-
 #include "cinder/Camera.h"
 #include "cinder/params/Params.h"
 
@@ -16,8 +15,11 @@ using namespace std;
 
 class TrianglePaintApp : public AppNative {
 	public:
+    void prepareSettings( Settings *settings ) override;
 	void setup();
 	void resize();
+    void buildVBOMesh();
+    void colorVBOMesh();
 	void mouseDown( MouseEvent event );
 	void mouseMove( MouseEvent event );
 	void update();
@@ -26,69 +28,161 @@ class TrianglePaintApp : public AppNative {
 	void drawAxis( float r, float b );
 	void drawMover();
 
+    bool inTriangle(Vec2f point, Vec2f p1, Vec2f p2, Vec2f p3);
+    
+    void getTriangle( int col, int row, Vec3f &a, Vec3f &b, Vec3f &c );
+    bool getTriangleFromMouse( int &col, int &row );
 	Vec2f convert( Vec2f rb );
 	Vec2f worldFromScreen( Vec2i xy );
 
-	gl::VboMeshRef	mVboMesh;
-
 	cinder::CameraOrtho mCam;
-	int mR = 1;
-	int mB = -1;
 
 	int mUnit = 50;
 
 	Vec2f touched = Vec2i::zero();
 	Vec2i mouse;
 
-
+    int mCols = 15;
+    int mRows = 20;
+    gl::VboMesh mMesh;
+    // Colors from http://www.colourlovers.com/palette/92095/Giant_Goldfish
+    // #69D2E7 and #A7DBD8
+    Color mColors[4]={
+        Color8u( 224,228,204 ),
+        Color8u( 167,219,216 ),
+        Color8u( 105,210,231 ),
+        Color8u::white()
+    };
+    std::vector<std::vector<int> > mPainted;
+    
 	params::InterfaceGl mParams;
 };
+
+void TrianglePaintApp::prepareSettings( Settings *settings )
+{
+	settings->enableHighDensityDisplay();
+	settings->enableMultiTouch( false );
+}
 
 void TrianglePaintApp::setup()
 {
 	mParams = params::InterfaceGl( "Parameters", Vec2i( 220, 170 ) );
+    mParams.addParam( "Scale", &mUnit )
+        .keyIncr( "s" ).keyDecr( "S" )
+        .min( 1 ).max( 100 ).step( 1 )
+        .updateFn( [this] { buildVBOMesh(); } );
+    mParams.addParam( "Columns", &mCols )
+        .keyIncr( "d" ).keyDecr( "D" )
+        .min( 1 ).max( 100 ).step( 1 )
+        .updateFn( [this] { buildVBOMesh(); } );
+    mParams.addParam( "Rows", &mRows )
+        .keyIncr( "f" ).keyDecr( "F" )
+        .min( 1 ).max( 100 ).step( 1 )
+        .updateFn( [this] { buildVBOMesh(); } );
+        
 	mParams.addParam( "X", &touched.x, true );
 	mParams.addParam( "Y", &touched.y, true );
-	mParams.hide();
-
-
-	static const int VERTICES_X = 10, VERTICES_Z = 5;
-
-	// setup the parameters of the Vbo
-	int totalVertices = VERTICES_X * VERTICES_Z;
-	int totalQuads = ( VERTICES_X - 1 ) * ( VERTICES_Z - 1 );
-	gl::VboMesh::Layout layout;
-	layout.setStaticIndices();
-	layout.setDynamicPositions();
-	mVboMesh = gl::VboMesh::create( totalVertices, totalQuads * 4, layout, GL_QUADS );
-
-	// buffer our static data - the texcoords and the indices
-	vector<uint32_t> indices;
-	for( int x = 0; x < VERTICES_X; ++x ) {
-		for( int z = 0; z < VERTICES_Z; ++z ) {
-			// create a quad for each vertex, except for along the bottom and right edges
-			if( ( x + 1 < VERTICES_X ) && ( z + 1 < VERTICES_Z ) ) {
-				indices.push_back( (x+0) * VERTICES_Z + (z+0) );
-				indices.push_back( (x+1) * VERTICES_Z + (z+0) );
-				indices.push_back( (x+1) * VERTICES_Z + (z+1) );
-				indices.push_back( (x+0) * VERTICES_Z + (z+1) );
-			}
-		}
-	}
+//	mParams.hide();
+    
+    buildVBOMesh();
 }
 
 // Replicate most of the defaultResize so we get a reference to the camera
 // for converting screen to world.
 void TrianglePaintApp::resize()
 {
-	Vec2i center = getWindowCenter();
-	mCam.setOrtho( -center.x, center.x, center.y, -center.y, -1, 1 );
+	Vec2i size = getWindowSize();
+	mCam.setOrtho( 0, size.x, size.y, 0, -1, 1 );
 	gl::setMatrices( mCam );
 }
+
+void TrianglePaintApp::buildVBOMesh()
+{
+    gl::VboMesh::Layout layout;
+    layout.setStaticIndices();
+    layout.setStaticPositions();
+    layout.setDynamicColorsRGB();
+    
+    mMesh = gl::VboMesh(mCols * mRows * 3,mCols * mRows * 3, layout, GL_TRIANGLES);
+    vector<uint32_t> indices;
+    vector<Vec3f> positions;
+    
+    Vec3f a;
+    Vec3f b;
+    Vec3f c;
+    int index = -1;
+
+    mPainted.resize(mCols);
+    for (int col = 0; col < mCols; col++) {
+        mPainted[col].resize(mRows);
+        for (int row = 0; row < mRows; row++) {
+            mPainted[col][row] = 3; //(col + row) % 2;
+            
+            getTriangle(col, row, a, b, c);
+            positions.push_back( a );
+            positions.push_back( b );
+            positions.push_back( c );
+            
+            index += 3;
+            indices.push_back( index - 2 );
+            indices.push_back( index - 1 );
+            indices.push_back( index );
+        }
+    }
+    mMesh.bufferIndices( indices );
+    mMesh.bufferPositions( positions );
+    
+    colorVBOMesh();
+}
+
+void TrianglePaintApp::colorVBOMesh()
+{
+    // Dynmaically color the grid
+	gl::VboMesh::VertexIter iter = mMesh.mapVertexBuffer();
+    for (int col = 0; col < mCols; col++) {
+        for (int row = 0; row < mRows; row++) {
+            Color8u color = mColors[mPainted[col][row]];
+            for (int vert = 0; vert < 3; vert++) {
+                iter.setColorRGB(color);
+                ++iter;
+            }
+		}
+	}
+}
+
+void TrianglePaintApp::getTriangle( int col, int row, Vec3f &a, Vec3f &b, Vec3f &c) {
+    float w = M_SQRT_3_2 * mUnit * 0.5f;
+    float h = mUnit * 0.5f;
+    float x = col * 2 * w + w;
+    float y = row * h;
+    
+    int direction = (col + row) % 2 ? 1 : -1;
+
+    a = Vec3f( x - w * direction, y - h, 0 );
+    b = Vec3f( x + w * direction, y + 0, 0 );
+    c = Vec3f( x - w * direction, y + h, 0 );
+}
+
+bool TrianglePaintApp::inTriangle(Vec2f p, Vec2f p0, Vec2f p1, Vec2f p2)
+{
+    // Based on http://stackoverflow.com/a/14382692/203673
+    float Area = 0.5*(-p1.y*p2.x + p0.y*(-p1.x + p2.x) + p0.x*(p1.y - p2.y) + p1.x*p2.y);
+    float s = 1/(2.0*Area)*(p0.y*p2.x - p0.x*p2.y + (p2.y - p0.y)*p.x + (p0.x - p2.x)*p.y);
+    float t = 1/(2.0*Area)*(p0.x*p1.y - p0.y*p1.x + (p0.y - p1.y)*p.x + (p1.x - p0.x)*p.y);
+    return (s>0.0 && t>0.0 && 1.0-s-t>0.0);
+}
+
 
 void TrianglePaintApp::mouseDown( MouseEvent event )
 {
 	touched = worldFromScreen(mouse);
+
+    int c;
+    int r;
+    if (!getTriangleFromMouse(c, r)) { return; }
+    mPainted[c][r] = (mPainted[c][r] + 1) % 4;
+    console() << "clicked " << r << " " << c << " - " << mPainted[c][r] << endl;
+    colorVBOMesh();
 }
 
 void TrianglePaintApp::mouseMove( MouseEvent event )
@@ -98,32 +192,30 @@ void TrianglePaintApp::mouseMove( MouseEvent event )
 
 void TrianglePaintApp::update()
 {
+
 }
 
 void TrianglePaintApp::draw()
 {
 	gl::pushModelView();
 
-	gl::clear( Color::white() );
+	gl::clear( Color(0.6f, 0.6f, 0.6f) );
+    
+    gl::draw(mMesh);
 
 //	drawGrid( 500 );
 
 	// Origin
-	gl::color( ColorA::black() );
+	gl::color( Color8u( 250,105,0 ) );
 	gl::drawSolidCircle( Vec2f::zero(), 5 );
 
 	drawMover();
+    Vec2f vert1, vert2, vert3;
 
-//	drawAxis(rb.x, rb.y);
-
-
-
-	gl::enableWireframe();
-	gl::color( Color::black() );
-	gl::draw( mVboMesh );
-	gl::disableWireframe();
-
-
+//	gl::enableWireframe();
+//	gl::color( Color::black() );
+//	gl::draw( mVboMesh );
+//	gl::disableWireframe();
 
 
 	gl::popModelView();
@@ -179,10 +271,13 @@ void TrianglePaintApp::drawAxis( float _r, float _b )
 void TrianglePaintApp::drawMover()
 {
 	Vec2f rb = worldFromScreen(mouse);
-	int fr = floor(rb.x);
-	int fb = floor(rb.y);
+    
+//    drawAxis(rb.x, rb.y);
+
 	int cr = ceil(rb.x);
+	int fr = floor(rb.x);
 	int cb = ceil(rb.y);
+	int fb = floor(rb.y);
 	Vec2f vert1 = Vec2f( fr, fb );
 	Vec2f vert2 = Vec2f(  0, cb );
 	Vec2f vert3 = Vec2f( cr,  0 );
@@ -195,21 +290,33 @@ void TrianglePaintApp::drawMover()
 		vert2.x = cr;
 		vert3.y = fb;
 	}
-//	console() << vert1 << " " << vert2 << " " << vert3 << endl;
-
+    
 	// Surrounding points
-	gl::color( Colorf( 1.0f, 0.0f, 0.0f) );
-	gl::drawSolidCircle( convert(vert1), 5 );
-	gl::color( Colorf( 0.0f, 1.0f, 0.0f) );
-	gl::drawSolidCircle( convert(vert2), 5 );
-	gl::color( Colorf( 0.0f, 0.0f, 1.0f) );
-	gl::drawSolidCircle( convert(vert3), 5 );
-
-	// Triangle
-	gl::color( Colorf( 0.0f, 0.0f, 0.0f) );
-	gl::drawSolidTriangle(convert(vert1), convert(vert2), convert(vert3));
+	gl::color( Color8u( 243,134,48 ) );
+    //	gl::color( Color8u( 167,219,216 ) );
+	gl::drawSolidCircle( convert(vert1), 2 );
+	gl::drawSolidCircle( convert(vert2), 2 );
+	gl::drawSolidCircle( convert(vert3), 2 );
+    gl::lineWidth(10);
+	gl::drawStrokedTriangle(convert(vert1), convert(vert2), convert(vert3));
 }
 
+bool TrianglePaintApp::getTriangleFromMouse( int &col, int &row )
+{
+    Vec2f pos = mouse;
+    Vec3f p0, p1, p2;
+    for (col = 0; col < mCols; col++) {
+        for (row = 0; row < mRows; row++) {
+            getTriangle(col, row, p0, p1, p2);
+            if (inTriangle(pos, p0.xy(), p1.xy(), p2.xy())) {
+                console() << p0 << p1 << p2 << endl;
+                return true;
+            }
+        }
+    }
+    console() << "No hit" << endl;
+    return false;
+}
 
 // RGB to XY
 Vec2f TrianglePaintApp::convert( Vec2f rb )
@@ -224,7 +331,7 @@ Vec2f TrianglePaintApp::convert( Vec2f rb )
 
 Vec2f TrianglePaintApp::worldFromScreen( Vec2i pos )
 {
-	pos -= getWindowCenter();
+//	pos -= getWindowCenter();
 	// I'm sure I'll have no idea how I derived these. I spent a lot of time
 	// looking at the unit circle in grapher. The red axis has an angle of 330
 	// degrees (11*pi/6) and slope is tan(11*pi/6) or -1/sqrt(3). Eventually I
@@ -241,22 +348,6 @@ Vec2f TrianglePaintApp::worldFromScreen( Vec2i pos )
 	float red = pos.x / M_SQRT_3_2;
 	float blue = -(pos.y - M_1_SQRT_3 * pos.x);
 	return Vec2f(red, blue) / mUnit;
-	/*
-	 // generate a ray from the camera into our world
-	 float u = pos.x / (float) getWindowWidth();
-	 float v = pos.y / (float) getWindowHeight();
-	 // because OpenGL and Cinder use a coordinate system
-	 // where (0, 0) is in the LOWERleft corner, we have to flip the v-coordinate
-	 Ray ray = mCam.generateRay(u , 1.0f - v, mCam.getAspectRatio() );
-
-	 float result = 0.0f;
-	 Vec3f planePos = Vec3f::zero();
-	 Vec3f normal = Vec3f::zAxis();
-	 if ( ray.calcPlaneIntersection( planePos, normal, &result ) ) {
-	 return ray.calcPosition( result ).xy();
-	 }
-	 return Vec2f::zero();
-	 */
 }
 
 CINDER_APP_NATIVE( TrianglePaintApp, RendererGl )
