@@ -21,6 +21,7 @@ class TrianglePaintApp : public AppNative {
     void buildVBOMesh();
     void colorVBOMesh();
 	void mouseDown( MouseEvent event );
+	void mouseDrag( MouseEvent event );
 	void mouseMove( MouseEvent event );
 	void update();
 	void draw();
@@ -28,10 +29,14 @@ class TrianglePaintApp : public AppNative {
 	void drawAxis( float r, float b );
 	void drawMover();
 
+
+    int toggleTriangle(int col, int row);
+    void colorTriangle(int col, int row, int palette_index);
+
     bool inTriangle(Vec2f point, Vec2f p1, Vec2f p2, Vec2f p3);
-    
     void getTriangle( int col, int row, Vec3f &a, Vec3f &b, Vec3f &c );
     bool getTriangleFromMouse( int &col, int &row );
+
 	Vec2f convert( Vec2f rb );
 	Vec2f worldFromScreen( Vec2i xy );
 
@@ -42,8 +47,9 @@ class TrianglePaintApp : public AppNative {
 	Vec2f touched = Vec2i::zero();
 	Vec2i mouse;
 
-    int mCols = 15;
-    int mRows = 20;
+    int mCols = 20;
+    int mRows = 30;
+    int mColor = 0;
     gl::VboMesh mMesh;
     // Colors from http://www.colourlovers.com/palette/92095/Giant_Goldfish
     // #69D2E7 and #A7DBD8
@@ -79,11 +85,15 @@ void TrianglePaintApp::setup()
         .keyIncr( "f" ).keyDecr( "F" )
         .min( 1 ).max( 100 ).step( 1 )
         .updateFn( [this] { buildVBOMesh(); } );
-        
+    mParams.addParam( "Color", &mColor )
+        .keyIncr( "c" ).keyDecr( "C" )
+        .min( 0 ).max( 3 ).step( 1 );
+
 	mParams.addParam( "X", &touched.x, true );
 	mParams.addParam( "Y", &touched.y, true );
 //	mParams.hide();
-    
+
+    hideCursor();
     buildVBOMesh();
 }
 
@@ -173,16 +183,42 @@ bool TrianglePaintApp::inTriangle(Vec2f p, Vec2f p0, Vec2f p1, Vec2f p2)
 }
 
 
+int TrianglePaintApp::toggleTriangle(int col, int row)
+{
+    return mPainted[col][row] = (mPainted[col][row] + 1) % 4;
+}
+
+void TrianglePaintApp::colorTriangle(int col, int row, int palette_index)
+{
+    mPainted[col][row] = palette_index;
+}
+
+
 void TrianglePaintApp::mouseDown( MouseEvent event )
 {
-	touched = worldFromScreen(mouse);
+    int col, row;
+    touched = worldFromScreen(mouse);
 
-    int c;
-    int r;
-    if (!getTriangleFromMouse(c, r)) { return; }
-    mPainted[c][r] = (mPainted[c][r] + 1) % 4;
-    console() << "clicked " << r << " " << c << " - " << mPainted[c][r] << endl;
-    colorVBOMesh();
+    if (getTriangleFromMouse(col, row)) {
+//        toggleTriangle(col, row);
+        colorTriangle(col, row, mColor);
+        colorVBOMesh();
+    }
+}
+
+void TrianglePaintApp::mouseDrag( MouseEvent event )
+{
+    mouse = Vec2i(event.getX(), event.getY());
+
+    int col, row;
+    touched = worldFromScreen(mouse);
+
+    if (getTriangleFromMouse(col, row)) {
+        colorTriangle(col, row, mColor);
+        colorVBOMesh();
+    }
+
+    console() << event.getX() << " " << event.getY() << endl;
 }
 
 void TrianglePaintApp::mouseMove( MouseEvent event )
@@ -197,13 +233,15 @@ void TrianglePaintApp::update()
 
 void TrianglePaintApp::draw()
 {
-	gl::pushModelView();
+
+gl::enableAlphaBlending();
+    gl::pushModelView();
 
 	gl::clear( Color(0.6f, 0.6f, 0.6f) );
     
     gl::draw(mMesh);
 
-//	drawGrid( 500 );
+	drawGrid( 500 );
 
 	// Origin
 	gl::color( Color8u( 250,105,0 ) );
@@ -227,25 +265,28 @@ void TrianglePaintApp::drawGrid( float size )
 {
 	gl::pushModelView();
 
+    gl::lineWidth(1);
+    gl::color(0, 0, 0, 0.1);
+
 	float step = mUnit * M_SQRT_3_2;
 
 	gl::rotate(30);
 
-	gl::color( ColorAf(0.7, 0, 0, 0.3f) );
+//	gl::color( ColorAf(0.7, 0, 0, 0.3f) );
 	for ( float i = -size * step; i <= size * step; i += step ) {
 		gl::drawLine( Vec2f(-size, i), Vec2f(size, i) );
 	}
 	gl::drawSolidTriangle(mUnit * Vec2f(1, 0), mUnit * Vec2f(0.8, -0.2), mUnit * Vec2f(0.8, 0.2));
 	gl::rotate(120);
 
-	gl::color( ColorAf(0, 0.7, 0, 0.3f) );
+//	gl::color( ColorAf(0, 0.7, 0, 0.3f) );
 	for ( float i = -size * step; i <= size * step; i += step ) {
 		gl::drawLine( Vec2f(-size, i), Vec2f(size, i) );
 	}
 	gl::drawSolidTriangle(mUnit * Vec2f(1, 0), mUnit * Vec2f(0.8, -0.2), mUnit * Vec2f(0.8, 0.2));
 	gl::rotate(120);
 
-	gl::color( ColorAf(0, 0, 0.7, 0.3f) );
+//	gl::color( ColorAf(0, 0, 0.7, 0.3f) );
 	for ( float i = -size * step; i <= size * step; i += step ) {
 		gl::drawLine( Vec2f(-size, i), Vec2f(size, i) );
 	}
@@ -271,7 +312,6 @@ void TrianglePaintApp::drawAxis( float _r, float _b )
 void TrianglePaintApp::drawMover()
 {
 	Vec2f rb = worldFromScreen(mouse);
-    
 //    drawAxis(rb.x, rb.y);
 
 	int cr = ceil(rb.x);
@@ -292,7 +332,8 @@ void TrianglePaintApp::drawMover()
 	}
     
 	// Surrounding points
-	gl::color( Color8u( 243,134,48 ) );
+//	gl::color( Color8u( 243,134,48 ) );
+    gl::color(mColors[mColor]);
     //	gl::color( Color8u( 167,219,216 ) );
 	gl::drawSolidCircle( convert(vert1), 2 );
 	gl::drawSolidCircle( convert(vert2), 2 );
