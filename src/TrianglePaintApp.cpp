@@ -46,7 +46,6 @@ class TrianglePaintApp : public AppNative {
 
 	int mUnit = 50;
 
-	Vec2f touched = Vec2i::zero();
 	Vec2i mouse;
 
     int mCols = 20;
@@ -91,8 +90,6 @@ void TrianglePaintApp::setup()
         .keyIncr( "c" ).keyDecr( "C" )
         .min( 0 ).max( 3 ).step( 1 );
 
-	mParams.addParam( "X", &touched.x, true );
-	mParams.addParam( "Y", &touched.y, true );
 //	mParams.hide();
 
     hideCursor();
@@ -199,8 +196,6 @@ void TrianglePaintApp::colorTriangle(int col, int row, int palette_index)
 void TrianglePaintApp::mouseDown( MouseEvent event )
 {
     int col, row;
-    touched = worldFromScreen(mouse);
-
     if (getTriangleFromMouse(col, row)) {
 //        toggleTriangle(col, row);
         colorTriangle(col, row, mColor);
@@ -213,8 +208,6 @@ void TrianglePaintApp::mouseDrag( MouseEvent event )
     mouse = Vec2i(event.getX(), event.getY());
 
     int col, row;
-    touched = worldFromScreen(mouse);
-
     if (getTriangleFromMouse(col, row)) {
         colorTriangle(col, row, mColor);
         colorVBOMesh();
