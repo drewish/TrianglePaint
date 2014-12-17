@@ -32,6 +32,7 @@ public:
     void drawOrigin();
     void drawMover();
 
+    void clearBoard();
 
     int toggleTriangle(int col, int row);
     void colorTriangle(int col, int row, int palette_index);
@@ -182,6 +183,10 @@ bool TrianglePaintApp::inTriangle(Vec2f p, Vec2f p0, Vec2f p1, Vec2f p2)
     return (s>0.0 && t>0.0 && 1.0-s-t>0.0);
 }
 
+void TrianglePaintApp::clearBoard()
+{
+    buildVBOMesh();
+}
 
 int TrianglePaintApp::toggleTriangle(int col, int row)
 {
@@ -233,6 +238,8 @@ void TrianglePaintApp::keyUp( KeyEvent event )
         mColor = 2;
     } else if( event.getChar() == '4' ) {
         mColor = 3;
+    } else if (event.getChar() == 'c' ) {
+        clearBoard();
     }
 }
 
