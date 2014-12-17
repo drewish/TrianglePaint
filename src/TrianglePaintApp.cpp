@@ -23,6 +23,7 @@ public:
     void mouseDown( MouseEvent event );
     void mouseDrag( MouseEvent event );
     void mouseMove( MouseEvent event );
+    void keyUp( KeyEvent );
     void update();
     void draw();
 
@@ -90,7 +91,7 @@ void TrianglePaintApp::setup()
         .keyIncr( "c" ).keyDecr( "C" )
         .min( 0 ).max( 3 ).step( 1 );
 
-//    mParams.hide();
+    mParams.hide();
 
 //    hideCursor();
     buildVBOMesh();
@@ -221,6 +222,21 @@ void TrianglePaintApp::mouseMove( MouseEvent event )
     mouse = Vec2i(event.getX(), event.getY());
 }
 
+void TrianglePaintApp::keyUp( KeyEvent event )
+{
+// TODO this is needlessly verbose.
+    if( event.getChar() == '1' ) {
+        mColor = 0;
+    } else if( event.getChar() == '2' ) {
+        mColor = 1;
+    } else if( event.getChar() == '3' ) {
+        mColor = 2;
+    } else if( event.getChar() == '4' ) {
+        mColor = 3;
+    }
+}
+
+
 void TrianglePaintApp::update()
 {
 }
@@ -235,7 +251,7 @@ void TrianglePaintApp::draw()
 
     gl::draw(mMesh);
 
-//    drawGrid( );
+    drawGrid( );
 //    drawOrigin();
     drawMover();
 
@@ -246,7 +262,7 @@ void TrianglePaintApp::draw()
 
     gl::popModelView();
 
-//    mParams.draw();
+    mParams.draw();
 }
 
 void TrianglePaintApp::drawGrid()
@@ -254,7 +270,7 @@ void TrianglePaintApp::drawGrid()
     gl::pushModelView();
 
     gl::lineWidth(1);
-    gl::color(0, 0, 0, 1.1);
+    gl::color(0, 0, 0, 0.2);
 
     int width = getWindowWidth();
     int height = getWindowHeight();
@@ -263,10 +279,10 @@ void TrianglePaintApp::drawGrid()
     // slope isn't the right word...
     float slope = width * M_1_SQRT_3;
 
-    int heightInTriangles = (int)(height / mUnit) * mUnit;
+    int heightInTriangles = ceil(height / (float)mUnit) * mUnit;
 
     // red  gl::color( ColorAf(0.7, 0, 0, 0.3f) );
-    for ( y = -heightInTriangles; y <= height; y += mUnit ) {
+    for ( y = -heightInTriangles; y <= heightInTriangles; y += mUnit ) {
         gl::drawLine( Vec2f(0, y), Vec2f(width, slope + y) );
     }
     // green  gl::color( ColorAf(0, 0.7, 0, 0.3f) );
@@ -276,7 +292,7 @@ void TrianglePaintApp::drawGrid()
     // blue  gl::color( ColorAf(0, 0, 0.7, 0.3f) );
     step = mUnit * M_SQRT_3_2;
     for ( x = 0; x <= width; x += step ) {
-        gl::drawLine( Vec2f(x, 0), Vec2f(x, height) );
+        gl::drawLine( Vec2f(x, 0), Vec2f(x, heightInTriangles) );
     }
 
     gl::popModelView();
