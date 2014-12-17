@@ -25,8 +25,10 @@ class TrianglePaintApp : public AppNative {
 	void mouseMove( MouseEvent event );
 	void update();
 	void draw();
-	void drawGrid( float size );
+
+	void drawGrid( );
 	void drawAxis( float r, float b );
+    void drawOrigin();
 	void drawMover();
 
 
@@ -237,16 +239,12 @@ void TrianglePaintApp::draw()
 gl::enableAlphaBlending();
     gl::pushModelView();
 
-	gl::clear( Color(0.6f, 0.6f, 0.6f) );
+	gl::clear( Color(0.9f, 0.9f, 0.9f) );
     
     gl::draw(mMesh);
 
-	drawGrid( 500 );
-
-	// Origin
-	gl::color( Color8u( 250,105,0 ) );
-	gl::drawSolidCircle( Vec2f::zero(), 5 );
-
+	drawGrid( );
+//    drawOrigin();
 	drawMover();
     Vec2f vert1, vert2, vert3;
 
@@ -261,39 +259,37 @@ gl::enableAlphaBlending();
 	mParams.draw();
 }
 
-void TrianglePaintApp::drawGrid( float size )
+void TrianglePaintApp::drawGrid()
 {
-	gl::pushModelView();
+    gl::pushModelView();
 
     gl::lineWidth(1);
-    gl::color(0, 0, 0, 0.1);
+    gl::color(0, 0, 0, 1.1);
 
-	float step = mUnit * M_SQRT_3_2;
+    int width = getWindowWidth();
+    int height = getWindowHeight();
+    float x, y;
+    float step = mUnit;
+    // slope isn't the right word...
+    float slope = width * M_1_SQRT_3;
 
-	gl::rotate(30);
+    int heightInTriangles = (int)(height / mUnit) * mUnit;
 
-//	gl::color( ColorAf(0.7, 0, 0, 0.3f) );
-	for ( float i = -size * step; i <= size * step; i += step ) {
-		gl::drawLine( Vec2f(-size, i), Vec2f(size, i) );
+    // red  gl::color( ColorAf(0.7, 0, 0, 0.3f) );
+	for ( y = -heightInTriangles; y <= height; y += mUnit ) {
+        gl::drawLine( Vec2f(0, y), Vec2f(width, slope + y) );
 	}
-	gl::drawSolidTriangle(mUnit * Vec2f(1, 0), mUnit * Vec2f(0.8, -0.2), mUnit * Vec2f(0.8, 0.2));
-	gl::rotate(120);
+    // green  gl::color( ColorAf(0, 0.7, 0, 0.3f) );
+    for ( y = 0; y <= heightInTriangles * 2; y += mUnit ) {
+        gl::drawLine( Vec2f(0, y), Vec2f(width, -slope + y) );
+    }
+    // blue  gl::color( ColorAf(0, 0, 0.7, 0.3f) );
+    step = mUnit * M_SQRT_3_2;
+    for ( x = 0; x <= width; x += step ) {
+        gl::drawLine( Vec2f(x, 0), Vec2f(x, height) );
+    }
 
-//	gl::color( ColorAf(0, 0.7, 0, 0.3f) );
-	for ( float i = -size * step; i <= size * step; i += step ) {
-		gl::drawLine( Vec2f(-size, i), Vec2f(size, i) );
-	}
-	gl::drawSolidTriangle(mUnit * Vec2f(1, 0), mUnit * Vec2f(0.8, -0.2), mUnit * Vec2f(0.8, 0.2));
-	gl::rotate(120);
-
-//	gl::color( ColorAf(0, 0, 0.7, 0.3f) );
-	for ( float i = -size * step; i <= size * step; i += step ) {
-		gl::drawLine( Vec2f(-size, i), Vec2f(size, i) );
-	}
-	gl::drawSolidTriangle(mUnit * Vec2f(1, 0), mUnit * Vec2f(0.8, -0.2), mUnit * Vec2f(0.8, 0.2));
-	gl::rotate(120);
-
-	gl::popModelView();
+    gl::popModelView();
 }
 
 void TrianglePaintApp::drawAxis( float _r, float _b )
@@ -307,6 +303,19 @@ void TrianglePaintApp::drawAxis( float _r, float _b )
 	gl::color( Colorf( 0.0f, 1.0f, 1.0f) );
 	gl::drawLine(r, b + r);
 	gl::lineWidth(1);
+}
+
+void TrianglePaintApp::drawOrigin()
+{
+    // Origin
+    gl::color( Color8u( 250,105,0 ) );
+    gl::drawSolidCircle( Vec2f::zero(), 5 );
+
+    gl::rotate(30);
+    for (int i = 0; i < 3; i++) {
+        gl::drawSolidTriangle(mUnit * Vec2f(1, 0), mUnit * Vec2f(0.8, -0.2), mUnit * Vec2f(0.8, 0.2));
+        gl::rotate(120);
+    }
 }
 
 void TrianglePaintApp::drawMover()
